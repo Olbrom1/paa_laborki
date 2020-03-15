@@ -1,61 +1,44 @@
 const Koa = require('koa')
-const Router = require('koa-router')
 const app = new Koa()
-const router = new Router()
-
 const views = require('koa-views')
-const co = require('co')
-const convert = require('koa-convert')
 const json = require('koa-json')
 const onerror = require('koa-onerror')
 const bodyparser = require('koa-bodyparser')
 const logger = require('koa-logger')
-const debug = require('debug')('koa2:server')
-const path = require('path')
 
-const config = require('./config')
-const routes = require('./routes')
-
-const port = process.env.PORT || config.port
-
+const index = require('./routes/index')
+const users = require('./routes/users')
+require('./store').init()
 // error handler
 onerror(app)
 
 // middlewares
-app.use(bodyparser())
-  .use(json())
-  .use(logger())
-  .use(require('koa-static')(__dirname + '/public'))
-  .use(views(path.join(__dirname, '/views'), {
-    options: {settings: {views: path.join(__dirname, 'views')}},
-    map: {'njk': 'nunjucks'},
-    extension: 'njk'
-  }))
-  .use(router.routes())
-  .use(router.allowedMethods())
-require('./store').init()
+app.use(bodyparser({
+  enableTypes:['json', 'form', 'text']
+}))
+app.use(json())
+app.use(logger())
+app.use(require('koa-static')(__dirname + '/public'))
+
+app.use(views(__dirname + '/views', {
+  extension: 'pug'
+}))
+
 // logger
 app.use(async (ctx, next) => {
   const start = new Date()
   await next()
   const ms = new Date() - start
-  console.log(`${ctx.method} ${ctx.url} - $ms`)
+  console.log(`${ctx.method} ${ctx.url} - ${ms}ms`)
 })
 
-router.get('/', async (ctx, next) => {
-  // ctx.body = 'Hello World'
-  ctx.state = {
-    title: 'Koa2'
-  }
-  await ctx.render('index', ctx.state)
-})
+// routes
+app.use(index.routes(), index.allowedMethods())
+app.use(users.routes(), users.allowedMethods())
 
-routes(router)
-app.on('error', function(err, ctx) {
-  console.log(err)
-  logger.error('server error', err, ctx)
-})
+// error-handling
+app.on('error', (err, ctx) => {
+  console.error('server error', err, ctx)
+});
 
-module.exports = app.listen(config.port, () => {
-  console.log(`Listening on http://localhost:${config.port}`)
-})
+module.exports = app
